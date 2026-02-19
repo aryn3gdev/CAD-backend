@@ -1,98 +1,58 @@
-// bot.js
-// ES module style
+// bot.js snippet for /vc_active command
 import { Client, GatewayIntentBits } from "discord.js";
-import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } from "@discordjs/voice";
-import WebSocket, { WebSocketServer } from "ws";
-import path from "path";
-import { fileURLToPath } from "url";
+import { joinVoiceChannel, getVoiceConnection } from "@discordjs/voice";
 
-// Fix __dirname in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const ALLOWED_USERS = ["USERID_1", "USERID_2"]; // IDs allowed to use command
+const VC_TOGGLES = new Map(); // guildId -> connection
 
-// ====== Environment Variables ======
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID; // numeric string
-const WS_PORT = 8080;
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
 
-// ====== Code sounds ======
-const CODE_SOUNDS = {
-  "10-99": "panic.mp3", // Place this mp3 in same folder
-  // Add more codes here if needed
-};
-
-// ====== Discord Client ======
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-  ]
-});
-
-client.once('ready', () => {
-  console.log(`Bot logged in as ${client.user.tag}`);
-});
-
-// ====== Function to play sound in VC ======
-async function playCodeSound(code) {
-  if (!CODE_SOUNDS[code]) return;
-
-  const guild = client.guilds.cache.get(GUILD_ID);
-  if (!guild) return console.log("Guild not found");
-
-  const channel = guild.channels.cache.get(VC_CHANNEL_ID);
-  if (!channel || !channel.isVoiceBased()) return console.log("Voice channel not found");
-
-  // Join VC
-  const connection = joinVoiceChannel({
-    channelId: VC_CHANNEL_ID,
-    guildId: GUILD_ID,
-    adapterCreator: guild.voiceAdapterCreator,
-    selfDeaf: false,
-  });
-
-  // Play audio
-  const player = createAudioPlayer();
-  const resource = createAudioResource(path.join(__dirname, CODE_SOUNDS[code]));
-  player.play(resource);
-  connection.subscribe(player);
-
-  player.on(AudioPlayerStatus.Idle, () => {
-    connection.destroy(); // Leave VC after sound finishes
-  });
-
-  player.on("error", (err) => {
-    console.error("Audio player error:", err);
-    connection.destroy();
-  });
-}
-
-// ====== WebSocket Server ======
-const wss = new WebSocketServer({ port: WS_PORT });
-wss.on('connection', (ws) => {
-  console.log('New WebSocket connection');
-
-  ws.on('message', (msg) => {
-    try {
-      const data = JSON.parse(msg.toString());
-
-      if (data.type === 'statusUpdate') {
-        console.log('Received status update:', data);
-
-        if (data.status === '10-99') {
-          playCodeSound(data.status);
-        }
-      }
-    } catch (err) {
-      console.error('Error parsing WebSocket message:', err);
+  if (interaction.commandName === 'vc_active') {
+    // Only allow certain users
+    if (!ALLOWED_USERS.includes(interaction.user.id)) {
+      return interaction.reply({ content: "You cannot use this command.", ephemeral: true });
     }
-  });
 
-  ws.on('close', () => {
-    console.log('WebSocket disconnected');
-  });
+    const channelId = interaction.options.getString('channel_id'); // optional
+    const guildId = interaction.guildId;
+
+    // If no channelId, disconnect from all VCs
+    if (!channelId) {
+      const connection = getVoiceConnection(guildId);
+      if (connection) {
+        connection.destroy();
+        VC_TOGGLES.delete(guildId);
+        return interaction.reply({ content: "Disconnected from VC(s)." });
+      } else {
+        return interaction.reply({ content: "Not connected to any VC." });
+      }
+    }
+
+    // Check if bot already in that VC
+    const existingConn = getVoiceConnection(guildId);
+    if (existingConn && existingConn.joinConfig.channelId === channelId) {
+      // Toggle: leave VC
+      existingConn.destroy();
+      VC_TOGGLES.delete(guildId);
+      return interaction.reply({ content: `Left VC ${channelId}.` });
+    }
+
+    // Join the VC
+    const guild = client.guilds.cache.get(guildId);
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased()) {
+      return interaction.reply({ content: "Invalid voice channel." });
+    }
+
+    const connection = joinVoiceChannel({
+      channelId: channelId,
+      guildId: guildId,
+      adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: false,
+    });
+
+    VC_TOGGLES.set(guildId, connection);
+    return interaction.reply({ content: `Connected to VC ${channelId}.` });
+  }
 });
-
-// ====== Login Discord Bot ======
-client.login(BOT_TOKEN).catch(err => console.error("Failed to login:", err));
