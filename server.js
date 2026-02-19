@@ -50,13 +50,16 @@ app.post("/auth", async (req, res) => {
 
     const user = userRes.data;
 
-    // Get member roles
-    const memberRes = await axios.get(
-      `https://discord.com/api/users/@me/guilds/${GUILD_ID}/member`,
-      {
-        headers: { Authorization: `Bearer ${access_token}` }
-      }
-    );
+// Get member roles using bot token
+  const memberRes = await axios.get(
+    `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
+    {
+      headers: { Authorization: `Bot ${process.env.BOT_TOKEN}` }
+    }
+  );
+  
+  const roles = memberRes.data.roles;
+
 
     const roles = memberRes.data.roles;
 
