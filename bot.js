@@ -70,6 +70,7 @@ wss.on('connection', ws => {
   ws.on('message', msg => {
     const data = JSON.parse(msg.toString());
     if (data.type === "statusUpdate") {
+      Received status update: { type: 'statusUpdate', callsign: 'Unit1', status: '10-99' }
       playCodeSound(data.status);
     }
   });
