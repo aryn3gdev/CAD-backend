@@ -1,23 +1,35 @@
-// bot.js snippet for /vc_active command
+// bot.js (ES module)
 import { Client, GatewayIntentBits } from "discord.js";
 import { joinVoiceChannel, getVoiceConnection } from "@discordjs/voice";
 
-const ALLOWED_USERS = ["USERID_1", "USERID_2"]; // IDs allowed to use command
-const VC_TOGGLES = new Map(); // guildId -> connection
+// ====== Environment Variables ======
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const GUILD_ID = process.env.GUILD_ID;
+const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID;
+
+// ====== Discord Client ======
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates
+  ]
+});
+
+// ====== /vc_active Command ======
+const ALLOWED_USERS = ["USERID_1", "USERID_2"];
+const VC_TOGGLES = new Map();
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
   if (interaction.commandName === 'vc_active') {
-    // Only allow certain users
     if (!ALLOWED_USERS.includes(interaction.user.id)) {
       return interaction.reply({ content: "You cannot use this command.", ephemeral: true });
     }
 
-    const channelId = interaction.options.getString('channel_id'); // optional
+    const channelId = interaction.options.getString('channel_id');
     const guildId = interaction.guildId;
 
-    // If no channelId, disconnect from all VCs
     if (!channelId) {
       const connection = getVoiceConnection(guildId);
       if (connection) {
@@ -29,20 +41,17 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
-    // Check if bot already in that VC
-    const existingConn = getVoiceConnection(guildId);
-    if (existingConn && existingConn.joinConfig.channelId === channelId) {
-      // Toggle: leave VC
-      existingConn.destroy();
-      VC_TOGGLES.delete(guildId);
-      return interaction.reply({ content: `Left VC ${channelId}.` });
-    }
-
-    // Join the VC
     const guild = client.guilds.cache.get(guildId);
     const channel = guild.channels.cache.get(channelId);
     if (!channel || !channel.isVoiceBased()) {
       return interaction.reply({ content: "Invalid voice channel." });
+    }
+
+    const existingConn = getVoiceConnection(guildId);
+    if (existingConn && existingConn.joinConfig.channelId === channelId) {
+      existingConn.destroy();
+      VC_TOGGLES.delete(guildId);
+      return interaction.reply({ content: `Left VC ${channelId}.` });
     }
 
     const connection = joinVoiceChannel({
@@ -56,3 +65,10 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `Connected to VC ${channelId}.` });
   }
 });
+
+// ====== Login ======
+client.once('ready', () => {
+  console.log(`Bot logged in as ${client.user.tag}`);
+});
+
+client.login(BOT_TOKEN);
