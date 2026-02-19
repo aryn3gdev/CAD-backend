@@ -1,29 +1,47 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
-const path = require('path');
-const WebSocket = require('ws');
+import { Client, GatewayIntentBits } from 'discord.js';
+import { 
+  joinVoiceChannel, 
+  createAudioPlayer, 
+  createAudioResource, 
+  AudioPlayerStatus 
+} from '@discordjs/voice';
+import WebSocket from 'ws';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates]
-});
+// Fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Environment variables
-const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID;
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID;
 const WS_PORT = process.env.WS_PORT || 8080;
 
 const CODE_SOUNDS = {
-  "10-99": "panic.mp3",
-  "10-80": "traffic.mp3",
-  "10-11": "disturbance.mp3",
+  "10-99": "panic button.mp3"
 };
 
-// Play a code sound
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates
+  ]
+});
+
+client.once('ready', () => {
+  console.log(`Bot logged in as ${client.user.tag}`);
+});
+
+// Play sound function
 async function playCodeSound(code) {
   if (!CODE_SOUNDS[code]) return;
 
   const channel = client.channels.cache.get(VC_CHANNEL_ID);
-  if (!channel || !channel.isVoiceBased()) return;
+  if (!channel || !channel.isVoiceBased()) {
+    console.log("Voice channel not found.");
+    return;
+  }
 
   const connection = joinVoiceChannel({
     channelId: VC_CHANNEL_ID,
@@ -33,7 +51,9 @@ async function playCodeSound(code) {
   });
 
   const player = createAudioPlayer();
-  const resource = createAudioResource(path.join(__dirname, CODE_SOUNDS[code]));
+  const resource = createAudioResource(
+    path.join(__dirname, CODE_SOUNDS[code])
+  );
 
   player.play(resource);
   connection.subscribe(player);
@@ -43,18 +63,16 @@ async function playCodeSound(code) {
   });
 }
 
-// WebSocket server for backend to communicate with bot
+// WebSocket server (optional if using internal events)
 const wss = new WebSocket.Server({ port: WS_PORT });
 
 wss.on('connection', ws => {
   ws.on('message', msg => {
-    const data = JSON.parse(msg);
-    if (data.type === 'statusUpdate' && CODE_SOUNDS[data.status]) {
+    const data = JSON.parse(msg.toString());
+    if (data.type === "statusUpdate") {
       playCodeSound(data.status);
     }
   });
 });
 
-// Login bot
-client.once('ready', () => console.log(`Bot logged in as ${client.user.tag}`));
 client.login(BOT_TOKEN);
