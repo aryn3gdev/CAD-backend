@@ -3,7 +3,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import { WebSocketServer } from "ws";
 
-require('./bot.js');
+import './bot.js';
 
 const app = express();
 app.use(bodyParser.json());
