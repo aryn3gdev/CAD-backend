@@ -1,32 +1,50 @@
 import express from "express";
 import bodyParser from "body-parser";
+import cors from "cors";
 import { WebSocketServer } from "ws";
 
 const app = express();
 app.use(bodyParser.json());
 
+// ===== CORS =====
+app.use(cors({
+  origin: "https://aryn3gdev.github.io", // frontend URL
+  methods: ["GET", "POST"]
+}));
+
 // ===== In-memory storage =====
-let units = [];   // Officer info: {callsign, status, discordID, discordName}
-let calls = [];   // 911 calls: {id, caller, info, status, timestamp}
+let units = []; // { callsign, status, discordID, discordName }
+let calls = []; // { id, caller, info, status, timestamp }
 
 // ===== HTTP Routes =====
-// Example auth route (replace with your Discord OAuth logic)
-app.post("/auth", (req, res) => {
-  // Placeholder: return allowed for testing
+
+// Discord auth placeholder (replace with real OAuth logic)
+app.post("/auth", async (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: "No code provided" });
 
-  // Here you would validate code with Discord OAuth
-  // For now, allow everyone
-  res.json({ allowed: true, dispatch: false });
+  try {
+    // TODO: Exchange code for token with Discord
+    // Example response for testing
+    const allowed = true;
+    const dispatch = false;
+    const discordName = "TestUser#0001";
+    const discordID = "123456789012345678";
+
+    res.json({ allowed, dispatch, discordName, discordID });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ allowed: false });
+  }
 });
 
-// ===== 911 Call endpoint =====
+// 911 call endpoint
 app.post("/911", (req, res) => {
   const { caller, info } = req.body;
   if (!caller || !info) return res.status(400).json({ error: "Missing caller or info" });
 
-  const id = Date.now(); // Simple unique ID
+  const id = Date.now();
   const timestamp = new Date().toLocaleTimeString();
   const call = { id, caller, info, status: "New", timestamp };
   calls.push(call);
