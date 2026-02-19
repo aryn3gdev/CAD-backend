@@ -16,8 +16,8 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI;
 const GUILD_ID = process.env.GUILD_ID;
 
-const WL_ROLE = "WL";
-const DISPATCH_ROLE = "WLDs";
+const WL_ROLE = "1474094161987768412";
+const DISPATCH_ROLE = "1474094665656701171";
 
 // In-memory storage (free version)
 let units = [];
