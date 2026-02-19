@@ -1,9 +1,6 @@
 import express from "express";
 import axios from "axios";
 import cors from "cors";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -11,24 +8,26 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI;
-const GUILD_ID = process.env.GUILD_ID;
-
+// Role IDs
 const WL_ROLE = "1474094161987768412";
 const DISPATCH_ROLE = "1474094665656701171";
 
-// In-memory storage (free version)
-let units = [];
-let logs = [];
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const GUILD_ID = process.env.GUILD_ID;
+const REDIRECT_URI = process.env.REDIRECT_URI;
+const BOT_TOKEN = process.env.BOT_TOKEN;
 
-// 🔐 Discord OAuth callback
+// Health check
+app.get("/", (req, res) => res.send("CAD-backend online"));
+
+// OAuth2 endpoint
 app.post("/auth", async (req, res) => {
-  const { code } = req.body;
-
   try {
-    // Exchange code for token
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: "No code provided" });
+
+    // Exchange code for access token
     const tokenRes = await axios.post(
       "https://discord.com/api/oauth2/token",
       new URLSearchParams({
@@ -36,8 +35,8 @@ app.post("/auth", async (req, res) => {
         client_secret: CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: REDIRECT_URI
-      }),
+        redirect_uri: REDIRECT_URI,
+      }).toString(),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
@@ -45,24 +44,20 @@ app.post("/auth", async (req, res) => {
 
     // Get user info
     const userRes = await axios.get("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${access_token}` }
+      headers: { Authorization: `Bearer ${access_token}` },
     });
-
     const user = userRes.data;
 
-// Get member roles using bot token
-  const memberRes = await axios.get(
-    `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
-    {
-      headers: { Authorization: `Bot ${process.env.BOT_TOKEN}` }
-    }
-  );
-  
-  const roles = memberRes.data.roles;
-
+    // Get member roles using bot token
+    const memberRes = await axios.get(
+      `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
+      { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+    );
 
     const roles = memberRes.data.roles;
+    console.log(`User ${user.username} roles:`, roles); // DEBUG LOG
 
+    // Check whitelist
     if (!roles.includes(WL_ROLE)) {
       return res.json({ allowed: false });
     }
@@ -72,57 +67,18 @@ app.post("/auth", async (req, res) => {
     res.json({
       allowed: true,
       dispatch: isDispatch,
-      username: user.username
+      username: user.username,
     });
-
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Auth failed" });
+    res.status(500).json({ error: "Authentication failed" });
   }
 });
 
-// 📟 Update Status
-app.post("/status", (req, res) => {
-  const { callsign, status } = req.body;
+// Placeholder endpoints for officer / dispatch actions
+app.post("/status", (req, res) => res.json({ ok: true }));
+app.post("/panic", (req, res) => res.json({ ok: true }));
+app.get("/units", (req, res) => res.json([]));
+app.get("/logs", (req, res) => res.json([]));
 
-  const unit = units.find(u => u.callsign === callsign);
-
-  if (unit) {
-    unit.status = status;
-  } else {
-    units.push({ callsign, status });
-  }
-
-  logs.push({
-    time: new Date().toISOString(),
-    message: `${callsign} — ${status}`
-  });
-
-  res.json({ success: true });
-});
-
-// 🚨 Panic
-app.post("/panic", (req, res) => {
-  const { callsign } = req.body;
-
-  logs.push({
-    time: new Date().toISOString(),
-    message: `🚨 PANIC — ${callsign}`
-  });
-
-  res.json({ success: true });
-});
-
-// 📡 Get Units
-app.get("/units", (req, res) => {
-  res.json(units);
-});
-
-// 📜 Get Logs
-app.get("/logs", (req, res) => {
-  res.json(logs);
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`CAD-backend running on port ${PORT}`));
