@@ -37,7 +37,11 @@ app.post("/auth", async (req, res) => {
         code,
         redirect_uri: REDIRECT_URI,
       }).toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
     );
 
     const access_token = tokenRes.data.access_token;
@@ -51,15 +55,15 @@ app.post("/auth", async (req, res) => {
     // Get member roles using bot token
     const memberRes = await axios.get(
       `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
-      { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
-      console.log("User info:", user.username, user.id);
-      console.log("Fetched roles:", roles);
+      {
+        headers: { Authorization: `Bot ${BOT_TOKEN}` }, // THIS LINE IS CORRECT NOW
+      }
     );
 
     const roles = memberRes.data.roles;
-    console.log(`User ${user.username} roles:`, roles); // DEBUG LOG
+    console.log("User info:", user.username, user.id);
+    console.log("Fetched roles:", roles); // DEBUG LOG
 
-    // Check whitelist
     if (!roles.includes(WL_ROLE)) {
       return res.json({ allowed: false });
     }
@@ -77,7 +81,7 @@ app.post("/auth", async (req, res) => {
   }
 });
 
-// Placeholder endpoints for officer / dispatch actions
+// Placeholder endpoints
 app.post("/status", (req, res) => res.json({ ok: true }));
 app.post("/panic", (req, res) => res.json({ ok: true }));
 app.get("/units", (req, res) => res.json([]));
