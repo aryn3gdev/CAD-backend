@@ -19,7 +19,7 @@ const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID;
 const WS_PORT = process.env.WS_PORT || 8080;
 
 const CODE_SOUNDS = {
-  "10-99": "panic button.mp3"
+  "10-99": "panic.mp3"
 };
 
 const client = new Client({
