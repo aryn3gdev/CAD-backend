@@ -1,90 +1,74 @@
 import express from "express";
-import axios from "axios";
-import cors from "cors";
+import bodyParser from "body-parser";
+import { WebSocketServer } from "ws";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
+// ===== In-memory storage =====
+let units = [];   // Officer info: {callsign, status, discordID, discordName}
+let calls = [];   // 911 calls: {id, caller, info, status, timestamp}
 
-// Role IDs
-const WL_ROLE = "1474094161987768412";
-const DISPATCH_ROLE = "1474094665656701171";
+// ===== HTTP Routes =====
+// Example auth route (replace with your Discord OAuth logic)
+app.post("/auth", (req, res) => {
+  // Placeholder: return allowed for testing
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const GUILD_ID = process.env.GUILD_ID;
-const REDIRECT_URI = process.env.REDIRECT_URI;
-const BOT_TOKEN = process.env.BOT_TOKEN;
-
-// Health check
-app.get("/", (req, res) => res.send("CAD-backend online"));
-
-// OAuth2 endpoint
-app.post("/auth", async (req, res) => {
-  try {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ error: "No code provided" });
-
-    // Exchange code for access token
-    const tokenRes = await axios.post(
-      "https://discord.com/api/oauth2/token",
-      new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: REDIRECT_URI,
-      }).toString(),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      }
-    );
-
-    const access_token = tokenRes.data.access_token;
-
-    // Get user info
-    const userRes = await axios.get("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-    const user = userRes.data;
-
-    // Get member roles using bot token
-    const memberRes = await axios.get(
-      `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
-      {
-        headers: { Authorization: `Bot ${BOT_TOKEN}` }, // THIS LINE IS CORRECT NOW
-      }
-    );
-
-    const roles = memberRes.data.roles;
-    console.log("User info:", user.username, user.id);
-    console.log("Fetched roles:", roles); // DEBUG LOG
-
-    if (!roles.includes(WL_ROLE)) {
-      return res.json({ allowed: false });
-    }
-
-    const isDispatch = roles.includes(DISPATCH_ROLE);
-
-    res.json({
-      allowed: true,
-      dispatch: isDispatch,
-      username: user.username,
-    });
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Authentication failed" });
-  }
+  // Here you would validate code with Discord OAuth
+  // For now, allow everyone
+  res.json({ allowed: true, dispatch: false });
 });
 
-// Placeholder endpoints
-app.post("/status", (req, res) => res.json({ ok: true }));
-app.post("/panic", (req, res) => res.json({ ok: true }));
-app.get("/units", (req, res) => res.json([]));
-app.get("/logs", (req, res) => res.json([]));
+// ===== 911 Call endpoint =====
+app.post("/911", (req, res) => {
+  const { caller, info } = req.body;
+  if (!caller || !info) return res.status(400).json({ error: "Missing caller or info" });
 
-app.listen(PORT, () => console.log(`CAD-backend running on port ${PORT}`));
+  const id = Date.now(); // Simple unique ID
+  const timestamp = new Date().toLocaleTimeString();
+  const call = { id, caller, info, status: "New", timestamp };
+  calls.push(call);
+
+  // Broadcast to all WebSocket clients
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) client.send(JSON.stringify({ type: "911Call", ...call }));
+  });
+
+  res.json({ success: true });
+});
+
+// ===== WebSocket Server =====
+const server = app.listen(10000, () => console.log("CAD-backend running on port 10000"));
+const wss = new WebSocketServer({ server });
+
+wss.on("connection", ws => {
+  console.log("New WebSocket connection");
+
+  // Send initial units + calls to new client
+  ws.send(JSON.stringify({ type: "initialData", units, calls }));
+
+  ws.on("message", msg => {
+    try {
+      const data = JSON.parse(msg);
+
+      // Officer register or status update
+      if (data.type === "register" || data.type === "statusUpdate") {
+        const idx = units.findIndex(u => u.callsign === data.callsign);
+        if (idx >= 0) units[idx] = { ...units[idx], ...data };
+        else units.push(data);
+
+        // Broadcast to all clients
+        wss.clients.forEach(client => {
+          if (client.readyState === 1) client.send(JSON.stringify({ type: "statusUpdate", ...data }));
+        });
+      }
+
+    } catch (e) {
+      console.error("WS message error:", e);
+    }
+  });
+
+  ws.on("close", () => console.log("WebSocket disconnected"));
+});
