@@ -1,24 +1,48 @@
-// bot.js (ES module)
-import { Client, GatewayIntentBits } from "discord.js";
+// bot.js
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from "discord.js";
 import { joinVoiceChannel, getVoiceConnection } from "@discordjs/voice";
 
-// ====== Environment Variables ======
+// ====== Environment ======
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
-const VC_CHANNEL_ID = process.env.VC_CHANNEL_ID;
 
 // ====== Discord Client ======
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
 });
 
-// ====== /vc_active Command ======
+// ====== Allowed Users ======
 const ALLOWED_USERS = ["USERID_1", "USERID_2"];
-const VC_TOGGLES = new Map();
+const VC_TOGGLES = new Map(); // guildId -> connection
 
+// ====== Register /vc_active Command ======
+const commands = [
+  new SlashCommandBuilder()
+    .setName('vc_active')
+    .setDescription('Toggle bot connection to a VC channel')
+    .addStringOption(option =>
+      option.setName('channel_id')
+        .setDescription('ID of the VC channel to join')
+        .setRequired(false))
+    .toJSON()
+];
+
+const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+
+(async () => {
+  try {
+    console.log('Registering slash commands...');
+    await rest.put(
+      Routes.applicationGuildCommands(BOT_TOKEN, GUILD_ID),
+      { body: commands }
+    );
+    console.log('Slash commands registered.');
+  } catch (err) {
+    console.error(err);
+  }
+})();
+
+// ====== Interaction Handling ======
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
@@ -66,7 +90,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// ====== Login ======
+// ====== Ready Event ======
 client.once('ready', () => {
   console.log(`Bot logged in as ${client.user.tag}`);
 });
