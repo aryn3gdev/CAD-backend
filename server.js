@@ -52,6 +52,8 @@ app.post("/auth", async (req, res) => {
     const memberRes = await axios.get(
       `https://discord.com/api/guilds/${GUILD_ID}/members/${user.id}`,
       { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+      console.log("User info:", user.username, user.id);
+      console.log("Fetched roles:", roles);
     );
 
     const roles = memberRes.data.roles;
